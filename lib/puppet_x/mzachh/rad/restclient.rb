@@ -19,22 +19,22 @@ module Puppetx::Mzachh
   module Puppetx::Mzachh::Rad
     class Puppetx::Mzachh::Rad::Restclient
     
-      @@auth_cookie = ""
-    
-      def self.get(url)
+      @@auth_cookie = {}
+      @@config = {}
+
+      def self.get(server_identifier="default", url)
         not_found = false
+        server_identifier, rad_address, verify_ssl = self.init_call(server_identifier)
+
         begin
-          RestClient.socket = '/system/volatile/rad/radsocket-http'
-          Puppet.debug "REST API Calling GET: #{url}" 
-          response = RestClient.get(
-            url,
-            {:cookies => @@auth_cookie}
-          )
+          Puppet.debug "REST API Calling GET: #{rad_address}#{url}" 
+          rad =  RestClient::Resource.new("#{rad_address}#{url}", :verify_ssl => verify_ssl )
+          response = rad.get(:cookies => @@auth_cookie[server_identifier])
           Puppet.debug "REST API response: #{response.to_str}" 
         rescue RestClient::ResourceNotFound 
           not_found = true
         rescue Exception => e
-          Puppet.err "REST API error: #{e.inspect}" 
+          raise(Exception, "\nREST API error: #{e.inspect}") 
         end
     
         if not_found
@@ -46,50 +46,63 @@ module Puppetx::Mzachh
         end
       end
     
-    
-      def self.auth()
-    
-        auth_json = '{
-          "username": "root", 
-          "password": "password123", 
-          "scheme": "pam", 
-          "preserve": true, 
-          "timeout": -1
-        }'
-    
-        Puppet.debug "Start authentication ..." 
-        RestClient.socket = '/system/volatile/rad/radsocket-http'
-        auth_response = RestClient.post('localhost/api/com.oracle.solaris.rad.authentication/1.0/Session', auth_json, :content_type => :json, :accept => :json)
-        if auth_response.code == 201
-          Puppet.debug "Authentication successful"
-        else
-          Puppet.debug "Authentication failed"
-        end
-        @@auth_cookie = auth_response.cookies
-      end
-    
-      def self.put(url, args)
+      def self.put(server_identifier="default", url, args)
+        server_identifier, rad_address, verify_ssl = self.init_call(server_identifier)
         begin
-          RestClient.socket = '/system/volatile/rad/radsocket-http'
           args_json = JSON.unparse(args)
-          Puppet.debug "REST API Calling PUT: #{url}" 
+          Puppet.debug "REST API Calling PUT: #{rad_address}#{url}" 
           Puppet.debug "REST API Calling arguments: #{JSON.pretty_generate(args)}" 
-          response = RestClient.put(
-            url,
-            args_json,
-            {:content_type => :json, :accept => :json, :cookies => @@auth_cookie}
-          )
+          rad =  RestClient::Resource.new("#{rad_address}#{url}", :verify_ssl => verify_ssl)
+          response = rad.put(args_json, :content_type => :json, :accept => :json, :cookies => @@auth_cookie[server_identifier])
           Puppet.debug "REST API response: #{response.to_str}" 
     
         rescue Exception => e
-          Puppet.err "REST API error: #{e.inspect}" 
+          raise(Exception, "\nREST API error: #{e.inspect}") 
         end
     
         unless response.code == 200
-          raise(Exception, "REST API wrong http status code: #{response.code}\n#{response.to_str}")
+          raise(Exception, "\nREST API wrong http status code: #{response.code}\n#{response.to_str}")
         end
         JSON.parse(response)
       end
+
+      def self.init_call(server_identifier)
+
+        if @@config == {}
+          Puppet.debug "Loading configuration ..."
+          config_file = File.read(File.dirname(__FILE__)+"/rad_config.json")
+          @@config = JSON.parse(config_file)
+          Puppet.debug "Loading configuration successful"
+        end
+ 
+        if server_identifier=="default"
+          server_identifier = "#{@@config['default']}"
+        end
+
+        if not @@config['connections'].has_key?(server_identifier)
+          raise(Exception, "No configuration for #{server_identifier} in #{config_file} available")
+        end
+
+        rad_address = "#{@@config['connections'][server_identifier]['address']}"
+        verify_ssl = "#{@@config['connections'][server_identifier]['verify_ssl']}" == "true"
+
+        if not @@auth_cookie.has_key?(server_identifier)
+    
+          Puppet.debug "Start authentication ..." 
+          auth_json = JSON.unparse(@@config['connections'][server_identifier]['auth'])
+          rad =  RestClient::Resource.new("#{rad_address}/api/com.oracle.solaris.rad.authentication/1.0/Session", :verify_ssl => verify_ssl)
+          auth_response = rad.post(auth_json, :content_type => :json, :accept => :json)
+
+          if auth_response.code == 201
+            Puppet.debug "Authentication successful"
+          else
+            Puppet.debug "Authentication failed"
+          end
+          @@auth_cookie[server_identifier] = auth_response.cookies
+        end
+        [server_identifier, rad_address, verify_ssl]
+      end
+    
     end
   end
 end

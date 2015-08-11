@@ -1,0 +1,27 @@
+{
+  "default" : "localhost",
+  "connections" : {
+    "localhost" : {
+      "address" : "https://127.0.0.1:12303",
+      "verify_ssl" : "false",
+      "auth" : {
+        "username": "zfsadmin1", 
+        "password": "password1", 
+        "scheme": "pam", 
+        "preserve": true, 
+        "timeout": -1
+        }
+    },
+    "sol113b" : {
+      "address" : "https://sol113b:12303",
+      "verify_ssl" : "false",
+      "auth" : {
+        "username": "zfsadmin2", 
+        "password": "password2", 
+        "scheme": "pam", 
+        "preserve": true, 
+        "timeout": -1
+        }
+    }
+  }
+}
