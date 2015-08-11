@@ -16,6 +16,7 @@ You need at least Solaris 11.3 beta, because this is the first version with the 
 - Configure RAD remote service. TODO: Add details.
 - Configure connections and credentials in "radproviders/lib/puppet_x/mzachh/rad/rad_config.json":
 
+
     {
       "default" : "localhost",
       "connections" : {
